@@ -1,0 +1,7 @@
+{
+  "sender": "sarah.jones@example.co.uk",
+  "sender_name": "Sarah Jones",
+  "subject": "Parcel says delivered but it isn't here",
+  "body": "Tracking says PCL100000003NL was delivered to my front door on Friday but there is nothing. I've checked with neighbours.",
+  "id": "03-deliv-not-received"
+}

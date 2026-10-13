@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: mailpilot - scheduled support-inbox agent (Gmail drafts, never auto-sends by default)
+
+Parameters:
+  ScheduleExpression:
+    Type: String
+    Default: rate(5 minutes)
+  SecretName:
+    Type: String
+    Default: mailpilot/prod
+    Description: >-
+      Secrets Manager secret with keys GOOGLE_API_KEY (or another provider key),
+      GMAIL_TOKEN_JSON and SUPPORT_ADDRESS.
+
+Resources:
+  MailpilotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      MemorySize: 1024
+      Timeout: 900
+      # One invocation at a time: two concurrent runs could draft the same email twice.
+      ReservedConcurrentExecutions: 1
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+          BATCH_LIMIT: "20"
+          DELIVERY_MODE: draft
+          LLM_MODEL: google_genai:gemini-2.5-flash
+          KNOWLEDGE_DIR: /var/task/knowledge
+          PARCELS_FILE: /var/task/data/parcels.json
+          METRICS_DB: none
+          GOOGLE_API_KEY: !Sub "{{resolve:secretsmanager:${SecretName}:SecretString:GOOGLE_API_KEY}}"
+          GMAIL_TOKEN_JSON: !Sub "{{resolve:secretsmanager:${SecretName}:SecretString:GMAIL_TOKEN_JSON}}"
+          SUPPORT_ADDRESS: !Sub "{{resolve:secretsmanager:${SecretName}:SecretString:SUPPORT_ADDRESS}}"
+      Events:
+        Poll:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Input: '{"limit": 20}'
+    Metadata:
+      Dockerfile: deploy/Dockerfile.lambda
+      DockerContext: ..
+      DockerTag: latest
+
+  ErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: mailpilot invocation errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref MailpilotFunction
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  FunctionName:
+    Value: !Ref MailpilotFunction

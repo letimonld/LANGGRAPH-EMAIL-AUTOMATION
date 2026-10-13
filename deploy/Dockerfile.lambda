@@ -1,0 +1,7 @@
+FROM public.ecr.aws/lambda/python:3.12
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --no-cache-dir ".[gemini,gmail]"
+COPY knowledge ${LAMBDA_TASK_ROOT}/knowledge
+COPY data ${LAMBDA_TASK_ROOT}/data
+CMD ["mailpilot.aws_lambda.handler"]
